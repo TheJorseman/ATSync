@@ -1,0 +1,22 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+.vs/
+*.swp
+.vscode/
+
+## Build artefacts (single-file self-contained binarios)
+dist/
+*.exe
+publish/
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Logs / temp
+*.log
+*.tmp

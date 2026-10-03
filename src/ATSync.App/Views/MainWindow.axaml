@@ -1,0 +1,174 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:ATSync.App.ViewModels"
+        xmlns:m="clr-namespace:ATSync.Core.Models;assembly=ATSync.Core"
+        xmlns:p="clr-namespace:ATSync.Core.Models;assembly=ATSync.Core"
+        x:Class="ATSync.App.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="{Binding Title}"
+        Width="980" Height="680"
+        MinWidth="780" MinHeight="540"
+        WindowStartupLocation="CenterScreen">
+
+  <DockPanel LastChildFill="True">
+
+    <!-- Status bar -->
+    <Border DockPanel.Dock="Bottom"
+            Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+            BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+            BorderThickness="0,1,0,0"
+            Padding="12,6">
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <TextBlock Text="ATSync" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding StatusBar}" Foreground="{DynamicResource SystemControlForegroundBaseMediumBrush}" />
+      </StackPanel>
+    </Border>
+
+    <!-- Header -->
+    <Border DockPanel.Dock="Top"
+            Background="{DynamicResource SystemControlBackgroundAccentBrush}"
+            Padding="20,14">
+      <StackPanel Spacing="4">
+        <TextBlock Text="ATSync" FontSize="24" FontWeight="SemiBold"
+                   Foreground="White"/>
+        <TextBlock Text="Sincronizador P2P de mods para American Truck Simulator"
+                   Foreground="White" Opacity="0.85"/>
+      </StackPanel>
+    </Border>
+
+    <!-- Tabs -->
+    <TabControl Margin="12" Padding="0" SelectedIndex="0">
+      <TabItem Header="1 · Detección">
+        <StackPanel Margin="16" Spacing="8">
+          <TextBlock Text="Información del sistema" FontWeight="SemiBold" FontSize="16"/>
+          <Grid ColumnDefinitions="170,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="0,8,0,0">
+            <TextBlock Grid.Column="0" Grid.Row="0" Text="Steam:" />
+            <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding Detect.SteamPath}" />
+            <TextBlock Grid.Column="0" Grid.Row="1" Text="ATS install:" />
+            <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding Detect.AtsInstall}" />
+            <TextBlock Grid.Column="0" Grid.Row="2" Text="Versión ATS:" />
+            <TextBlock Grid.Column="1" Grid.Row="2" Text="{Binding Detect.AtsVersion}" />
+            <TextBlock Grid.Column="0" Grid.Row="3" Text="DLCs poseídos:" />
+            <TextBlock Grid.Column="1" Grid.Row="3" Text="{Binding Detect.DlcsOwned}" />
+            <TextBlock Grid.Column="0" Grid.Row="4" Text="Mi PeerID:" />
+            <TextBox Grid.Column="1" Grid.Row="4" Text="{Binding Detect.PeerId}" IsReadOnly="True" />
+          </Grid>
+          <Button Content="Refrescar" Command="{Binding Detect.RefreshCommand}" Margin="0,12,0,0" HorizontalAlignment="Left"/>
+        </StackPanel>
+      </TabItem>
+
+      <TabItem Header="2 · Mods">
+        <DockPanel Margin="16">
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+            <TextBlock Text="{Binding Mods.ModsDir, StringFormat=Carpeta: {0}}" VerticalAlignment="Center" Opacity="0.8"/>
+            <Button Content="Re-escanear" Command="{Binding Mods.RescanCommand}"/>
+          </StackPanel>
+          <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+            <TextBlock Text="Selección:" VerticalAlignment="Center"/>
+            <TextBlock Text="{Binding Mods.Selected.Count, StringFormat={}mods seleccionados}" VerticalAlignment="Center"/>
+            <Button Content="Publicar perfil" Command="{Binding Mods.PublishCommand}" />
+          </StackPanel>
+          <Grid ColumnDefinitions="40*,30*,50*,15*,15*,15*" RowDefinitions="*">
+            <ListBox Grid.Column="0" Grid.ColumnSpan="6" ItemsSource="{Binding Mods.Items}"
+                     SelectionMode="Multiple"
+                     SelectedItems="{Binding Mods.Selected, Mode=TwoWay}"
+                     AutoScrollToSelectedItem="False">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="m:ModEntry">
+                  <Grid ColumnDefinitions="3*,2*,3*,1*,1*,1*" Margin="0,2">
+                    <TextBlock Grid.Column="0" Text="{Binding Filename}" FontWeight="SemiBold"/>
+                    <TextBlock Grid.Column="1" Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Grid.Column="2" Text="{Binding Author}" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Grid.Column="3" Text="{Binding PackageVersion}" />
+                    <TextBlock Grid.Column="4" Text="{Binding Size, StringFormat={}{0:N0} B}"/>
+                    <TextBlock Grid.Column="5" Text="{Binding Sha256Hex}" Opacity="0.5"
+                               FontFamily="Consolas, Menlo, monospace"/>
+                  </Grid>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Grid>
+        </DockPanel>
+      </TabItem>
+
+      <TabItem Header="3 · Perfiles">
+        <DockPanel Margin="16">
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+            <Button Content="Refrescar" Command="{Binding Profiles.RefreshCommand}"/>
+            <TextBlock Text="{Binding Profiles.ActivateStatus}" Opacity="0.7" VerticalAlignment="Center" Margin="12,0,0,0"/>
+          </StackPanel>
+          <ListBox ItemsSource="{Binding Profiles.Items}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="p:AtsyncProfile">
+                <StackPanel>
+                  <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                  <TextBlock Text="{Binding Id}" Opacity="0.6" FontSize="11"/>
+                  <TextBlock Text="{Binding CreatedAt, StringFormat=Creado: {0:yyyy-MM-dd HH:mm}}" Opacity="0.6" FontSize="11"/>
+                  <TextBlock Text="{Binding Mods.Count, StringFormat=Mods: {0}}" FontSize="11"/>
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </TabItem>
+
+      <TabItem Header="4 · Importar">
+        <StackPanel Margin="16" Spacing="10">
+          <TextBlock Text="Importar perfil de un amigo" FontWeight="SemiBold" FontSize="16"/>
+          <TextBlock Text="Pega el URI atsync://… y la dirección del peer." Opacity="0.7"/>
+
+          <TextBlock Text="URI:" Margin="0,8,0,0"/>
+          <TextBox Text="{Binding Import.Uri, Mode=TwoWay}" Watermark="atsync://profile/bafkrei…"
+                   FontFamily="Consolas, Menlo, monospace"/>
+
+          <TextBlock Text="Dirección del peer:" Margin="0,8,0,0"/>
+          <TextBox Text="{Binding Import.PeerAddress, Mode=TwoWay}" Watermark="tcp://192.168.1.42:6881"
+                   FontFamily="Consolas, Menlo, monospace"/>
+
+          <CheckBox Content="Activar en el primer perfil ATS (opt-in, crea backup mod.sii.bak)"
+                    IsChecked="{Binding Import.ActivateAfter, Mode=TwoWay}" Margin="0,8,0,0"/>
+
+          <Button Content="Importar" Command="{Binding Import.ImportCommand}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+          <TextBlock Text="{Binding Import.Status}" Margin="0,12,0,0" TextWrapping="Wrap"/>
+        </StackPanel>
+      </TabItem>
+
+      <TabItem Header="5 · Escuchar">
+        <StackPanel Margin="16" Spacing="10">
+          <TextBlock Text="Dejar el peer a la escucha" FontWeight="SemiBold" FontSize="16"/>
+          <TextBlock Text="Cuando estés escuchando, otros pueden importar tu perfil y mods." Opacity="0.7"/>
+
+          <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
+            <Button Content="Iniciar" Command="{Binding Listen.StartCommand}"/>
+            <Button Content="Detener" Command="{Binding Listen.StopCommand}"/>
+          </StackPanel>
+
+          <Border Margin="0,16,0,0" Padding="10"
+                  Background="{DynamicResource SystemControlBackgroundChromeMediumBrush}"
+                  BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}"
+                  BorderThickness="1" CornerRadius="6">
+            <StackPanel>
+              <TextBlock Text="Estado:" FontWeight="SemiBold"/>
+              <TextBlock Text="{Binding Listen.Status}" Margin="0,4,0,0"/>
+              <TextBlock Text="Dirección:" FontWeight="SemiBold" Margin="0,8,0,0"/>
+              <TextBox Text="{Binding Listen.ListenAddress}" IsReadOnly="True"
+                       FontFamily="Consolas, Menlo, monospace"/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </TabItem>
+
+      <TabItem Header="6 · Ajustes">
+        <StackPanel Margin="16" Spacing="10">
+          <TextBlock Text="Ajustes" FontWeight="SemiBold" FontSize="16"/>
+          <CheckBox Content="Activar mods automáticamente al importar (opt-in, crea backup mod.sii.bak)"
+                    IsChecked="{Binding Settings.ActivateOnImport, Mode=TwoWay}"/>
+          <CheckBox Content="Sólo perfiles privados firmados (v0.4)"
+                    IsChecked="{Binding Settings.PrivateProfilesOnly, Mode=TwoWay}"/>
+          <TextBlock Text="Puerto de escucha preferido (0 = aleatorio):"/>
+          <NumericUpDown Value="{Binding Settings.ListenPort, Mode=TwoWay}" Minimum="0" Maximum="65535" Increment="1"/>
+        </StackPanel>
+      </TabItem>
+    </TabControl>
+  </DockPanel>
+</Window>
