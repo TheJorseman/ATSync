@@ -9,6 +9,7 @@ using ATSync.Core.Util;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Microsoft.Extensions.Logging;
 
 namespace ATSync.App;
 
@@ -52,6 +53,20 @@ public sealed class AppServices
     public ProfileManager AtsProfiles { get; }
     public ProfileTransfer Transfer { get; }
     public SettingsService Settings { get; }
+    public ILogger Log { get; }
+
+    /// <summary>Host libp2p v0.2 (Relay v2 + DCUtR ready). Creado perezosamente.</summary>
+    private Libp2pHost? _libp2p;
+    public Libp2pHost GetOrCreateLibp2pHost()
+    {
+        if (_libp2p is null)
+        {
+            _libp2p = new Libp2pHost(Identity, Log);
+            _libp2p.AppProtocol.ProfilesDir = Paths.ProfilesDir;
+            _libp2p.AppProtocol.ModsDir = Paths.StagingDir;
+        }
+        return _libp2p;
+    }
 
     public AppServices(string? rootDir = null)
     {
@@ -65,5 +80,8 @@ public sealed class AppServices
         Transfer = new ProfileTransfer(Identity, Profiles);
         Transfer.ModSearchDirs.Add(Paths.StagingDir);
         Settings = new SettingsService(Paths.SettingsPath);
+
+        Log = LoggerFactory.Create(b => b.AddConsole().SetMinimumLevel(LogLevel.Information))
+            .CreateLogger("ATSync.App");
     }
 }

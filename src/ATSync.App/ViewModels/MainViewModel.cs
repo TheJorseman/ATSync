@@ -458,6 +458,9 @@ public sealed class ListenViewModel : ObservableObject
     public string Status { get; private set; } = "Detenido";
     public string StatusGlyph { get; private set; } = "⚪";
     public int ConnectedPeers { get; private set; }
+    public string TransportName => _s.Settings.Data.Transport == "libp2p" ? "libp2p" : "TCP";
+
+    public System.Collections.ObjectModel.ObservableCollection<string> Libp2pAddrs { get; } = new();
 
     public RelayCommand StartCommand { get; }
     public RelayCommand StopCommand { get; }
@@ -466,8 +469,8 @@ public sealed class ListenViewModel : ObservableObject
     public ListenViewModel(AppServices s, Action<string> onStatus)
     {
         _s = s; _onStatus = onStatus;
-        StartCommand = new RelayCommand(_ => Start(), _ => !_s.Transfer.IsRunning);
-        StopCommand = new RelayCommand(_ => Stop(), _ => _s.Transfer.IsRunning);
+        StartCommand = new RelayCommand(_ => Start(), _ => CanStart());
+        StopCommand = new RelayCommand(_ => Stop(), _ => CanStop());
         CopyAddressCommand = new RelayCommand(_ => CopyToClipboard(ListenAddress));
 
         _s.Transfer.PeerConnected += (_, peerId) =>
@@ -479,31 +482,79 @@ public sealed class ListenViewModel : ObservableObject
         UpdateState();
     }
 
+    private bool CanStart()
+    {
+        var transport = _s.Settings.Data.Transport;
+        if (transport == "libp2p") return _s.GetOrCreateLibp2pHost().IsRunning == false;
+        return !_s.Transfer.IsRunning;
+    }
+    private bool CanStop()
+    {
+        var transport = _s.Settings.Data.Transport;
+        if (transport == "libp2p") return _s.GetOrCreateLibp2pHost().IsRunning;
+        return _s.Transfer.IsRunning;
+    }
+
     private void UpdateState()
     {
-        ListenAddress = _s.Transfer.IsRunning ? _s.Transfer.LocalAddress : "(sin iniciar)";
-        Status = _s.Transfer.IsRunning ? "Escuchando" : "Detenido";
-        StatusGlyph = _s.Transfer.IsRunning ? "🟢" : "⚪";
+        var transport = _s.Settings.Data.Transport;
+        if (transport == "libp2p")
+        {
+            var host = _s.GetOrCreateLibp2pHost();
+            Libp2pAddrs.Clear();
+            foreach (var a in host.ListenMultiaddrs) Libp2pAddrs.Add(a);
+            OnPropertyChanged(nameof(Libp2pAddrs));
+            ListenAddress = host.IsRunning
+                ? (host.ListenMultiaddrs.FirstOrDefault() ?? "(esperando…)")
+                : "(sin iniciar)";
+            Status = host.IsRunning ? "Escuchando (libp2p)" : "Detenido";
+            StatusGlyph = host.IsRunning ? "🟢" : "⚪";
+        }
+        else
+        {
+            ListenAddress = _s.Transfer.IsRunning ? _s.Transfer.LocalAddress : "(sin iniciar)";
+            Status = _s.Transfer.IsRunning ? "Escuchando (TCP)" : "Detenido";
+            StatusGlyph = _s.Transfer.IsRunning ? "🟢" : "⚪";
+        }
         OnPropertyChanged(nameof(ListenAddress));
         OnPropertyChanged(nameof(Status));
         OnPropertyChanged(nameof(StatusGlyph));
+        OnPropertyChanged(nameof(TransportName));
         StartCommand.RaiseCanExecuteChanged();
         StopCommand.RaiseCanExecuteChanged();
     }
 
-    private void Start()
+    private async void Start()
     {
         try
         {
-            _s.Transfer.StartAsync(_s.Settings.Data.ListenPort).GetAwaiter().GetResult();
-            _onStatus($"Listening en {_s.Transfer.LocalAddress}");
+            if (_s.Settings.Data.Transport == "libp2p")
+            {
+                var host = _s.GetOrCreateLibp2pHost();
+                var port = _s.Settings.Data.Libp2pPort;
+                await host.StartAsync(new[] { $"/ip4/0.0.0.0/tcp/{port}" },
+                                       enableRelay: _s.Settings.Data.Libp2pEnableRelay);
+                _onStatus($"libp2p listo. PeerId={host.Libp2pPeerId}");
+            }
+            else
+            {
+                await _s.Transfer.StartAsync(_s.Settings.Data.ListenPort);
+                _onStatus($"TCP listening en {_s.Transfer.LocalAddress}");
+            }
         }
         catch (Exception ex) { Status = $"Error: {ex.Message}"; }
         UpdateState();
     }
-    private void Stop()
+
+    private async void Stop()
     {
-        try { _s.Transfer.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+        try
+        {
+            if (_s.Settings.Data.Transport == "libp2p")
+                await _s.GetOrCreateLibp2pHost().StopAsync();
+            else
+                await _s.Transfer.DisposeAsync();
+        }
         catch { /* ignore */ }
         UpdateState();
         _onStatus("Listening detenido");

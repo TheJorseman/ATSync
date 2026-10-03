@@ -279,6 +279,8 @@
           <TextBlock Classes="h2" Text="Dejar el peer a la escucha"/>
           <TextBlock TextWrapping="Wrap" Opacity="0.7"
                      Text="Cuando estés escuchando, otros pueden importar tu perfil y mods. Pásales la dirección que aparece abajo (puede ser localhost si están en tu misma PC, o tu IP pública/relay)."/>
+          <TextBlock TextWrapping="Wrap" Opacity="0.7" FontSize="11"
+                     Text="{Binding Listen.TransportName, StringFormat='Transporte activo: {0} (cambia en Ajustes · pestaña 6)'}"/>
 
           <StackPanel Orientation="Horizontal" Spacing="8">
             <Button Content="Iniciar" Classes="primary" Command="{Binding Listen.StartCommand}"/>
@@ -301,9 +303,24 @@
               </Grid>
               <Border Classes="chip chip-muted" Padding="10,6" Margin="0,4,0,0">
                 <StackPanel>
-                  <TextBlock Text="Dirección" Opacity="0.6" FontSize="11"/>
+                  <TextBlock Text="Dirección (TCP) / Multiaddr principal" Opacity="0.6" FontSize="11"/>
                   <TextBox Text="{Binding Listen.ListenAddress}" IsReadOnly="True"
                            FontFamily="Consolas, Menlo, monospace" Background="Transparent"/>
+                </StackPanel>
+              </Border>
+              <Border Classes="chip chip-muted" Padding="10,6" Margin="0,4,0,0"
+                      IsVisible="{Binding Listen.TransportName, Converter={StaticResource StringEqualsConverter}, ConverterParameter=libp2p}">
+                <StackPanel>
+                  <TextBlock Text="Multiaddrs libp2p (comparte cualquiera con tu amigo)" Opacity="0.6" FontSize="11"/>
+                  <ItemsControl ItemsSource="{Binding Listen.Libp2pAddrs}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <TextBox Text="{Binding}" IsReadOnly="True"
+                                 FontFamily="Consolas, Menlo, monospace"
+                                 FontSize="11" Background="Transparent" Margin="0,1"/>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
                 </StackPanel>
               </Border>
               <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
