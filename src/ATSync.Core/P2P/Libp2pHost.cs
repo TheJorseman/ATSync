@@ -67,6 +67,7 @@ public sealed class Libp2pHost : IAsyncDisposable
     public async Task StartAsync(
         IEnumerable<string>? listenAddresses = null,
         bool enableRelay = true,
+        bool enableQuic = true,
         CancellationToken ct = default)
     {
         AppProtocol.AppPeerId = _appIdentity.PeerId;
@@ -76,7 +77,12 @@ public sealed class Libp2pHost : IAsyncDisposable
         // `AddLibp2p` requiere un Func<...> que devuelva el builder.
         services.AddLibp2p(b =>
         {
+            // QUIC es UDP-based: atraviesa NATs más fácilmente que TCP y permite
+            // connection migration (no se cae si cambia la IP del peer). Habilitar
+            // por defecto no cuesta nada y mejora las opciones de NAT traversal.
+            if (enableQuic) b.WithQuic();
             if (enableRelay) b.WithRelay();
+            // mDNS viene on por defecto en el stack (descubrimiento LAN automático).
             // Registrar el protocolo app-layer ATSync sobre ISession (yamux multistream-select).
             b.AddProtocol(AppProtocol, isExposed: true);
             return b;

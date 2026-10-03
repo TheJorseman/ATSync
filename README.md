@@ -114,9 +114,46 @@ BYE                     -> BYE
 
 NAT traversal: dos pares detrás de NAT pueden negociar canales directos vía Relay v2 (HOP) y luego DCUtR perfora el NAT. Configurable en `Ajustes > Transporte P2P > Habilitar Circuit Relay v2`.
 
-Limitaciones conocidas de v0.2:
+## NAT traversal — qué hay y qué falta (honesto)
 
-- Relay client está habilitado pero no hay un servidor de relay público configurado por defecto. Los usuarios pueden apuntar a uno público (e.g. `auto-relay.libp2p.io`) o auto-hospedarlo con `WithRelay()` y `AutoRelayMode.Server` (v0.3).
+**Con `WithQuic()` + `WithRelay()` + mDNS, ATSync v0.2 ofrece:**
+
+| Escenario | Soporte | Notas |
+|---|---|---|
+| Misma LAN (mismo router WiFi) | ✅ automático | mDNS descubre el peer sin config |
+| Uno con IP pública, otro en NAT | ✅ manual | El peer público abre puerto; el otro dialea |
+| Ambos en NAT, mismo CGNAT grande | ⚠️ necesita relay | Por defecto NO hay relay configurado |
+| NAT simétrico / CGNAT duro | ❌ | Igual que BitTorrent: requiere VPN (Tailscale/ZeroTier) o relay público |
+
+**Qué tenemos y qué no en Nethermind.Libp2p 1.0.1 (v0.2):**
+
+- ✅ Relay v2 wire protocol (`WithRelay()`): el peer SABE usar relay, pero no descubre relays automáticamente.
+- ✅ mDNS discovery (LAN, automático).
+- ✅ QUIC transport (`WithQuic()`, habilitado por defecto en v0.2): UDP-based, atraviesa NATs más fácilmente que TCP y soporta connection migration.
+- ❌ AutoRelay client mode: no expuesto en la API estable. Imposible descubrir relays vía DHT sin upstream changes.
+- ❌ DCUtR hole-punching: no expuesto en la API estable. Una vez conectados vía relay, no hay upgrade automático a conexión directa.
+- ❌ Configuración de relay server URLs: no hay método público para apuntar a relays conocidos.
+
+**Mientras tanto, opciones prácticas (sin esperar a upstream):**
+
+1. **misma LAN** — cero config, automático (mDNS).
+
+2. **Tailscale / ZeroTier / Hamachi** — la solución que BitTorrent también usa cuando los NATs son hostiles. Instala una VPN mesh entre los dos PCs; el transporte libp2p ve una IP "pública" virtual y funciona sin más.
+
+3. **Relay público manual** — apunta a uno conocido vía multiaddr compuesto `/ip4/<host>/tcp/<port>/p2p/<relay-id>/p2p/<target-id>`. Esto es experimental en v0.2 (no testeado contra relays públicos desde este repo).
+
+4. **Hospeda tu propio relay** — Nethermind.Libp2p 1.0.1 expone el protocolo Relay v2 server (`RelayHopProtocol`), por lo que un peer ATSync puede actuar como relay para otros. Necesita IP pública o VPS; fuera del scope de este repo por ahora.
+
+**Por qué BitTorrent "no tiene NAT"** (matices importantes):
+- BT tiene 20+ años de infraestructura global: routers DHT públicos hardcoded (`router.bittorrent.com:6881`) y millones de seeds.
+- BT usa uTP (UDP) — mismo principio que QUIC. ATSync ya lo habilita.
+- BT no soluciona CGNAT simétrico: en ese caso el usuario también usa VPN/seedbox.
+
+Esto NO es una limitación específica de ATSync — es la realidad del peer-to-peer contra NATs restrictivos. La diferencia es que BitTorrent tiene más infraestructura para mitigar el problema.
+
+Configuración NAT en `Ajustes`:
+- `Habilitar Circuit Relay v2` — activa el wire protocol (default ON).
+- `Habilitar QUIC` — activa transporte UDP (default ON, v0.2+).
 - El protocolo actual es simétrico y stateful; todavía no hay PSK ni autenticación mutua fuerte. La verificación Ed25519 se hace en libp2p a nivel de transporte (Noise), no a nivel aplicación.
 
 ## UI (v0.1.0)
