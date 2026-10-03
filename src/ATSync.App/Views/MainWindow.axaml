@@ -244,10 +244,8 @@
                 </Grid>
                 <TextBox Text="{Binding Import.Uri, Mode=TwoWay}" Watermark="atsync://profile/bafkrei..."
                          FontFamily="Consolas, Menlo, monospace" Padding="8,6"/>
-                <Border Classes="chip" Padding="10,4">
-                  <Border.Classes>
-                    <Binding Path="Import.StatusColor" Converter="{x:Static vm:StatusColorConverter.Instance}"/>
-                  </Border.Classes>
+                <Border Classes="chip" Padding="10,4"
+                        Background="{Binding Import.StatusColor, Converter={x:Static vm:StatusColorConverter.Instance}}">
                   <TextBlock Text="{Binding Import.Status}" TextWrapping="Wrap"/>
                 </Border>
 
