@@ -2,7 +2,111 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="ATSync.App.App"
              RequestedThemeVariant="Dark">
+
   <Application.Styles>
     <FluentTheme />
+
+    <!-- Estilos globales -->
+    <Style Selector="Window">
+      <Setter Property="Background" Value="#0F1620" />
+    </Style>
+
+    <Style Selector="TextBlock.h1">
+      <Setter Property="FontSize" Value="26"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="TextBlock.h2">
+      <Setter Property="FontSize" Value="17"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="TextBlock.subtitle">
+      <Setter Property="Foreground" Value="#9CB0C5"/>
+    </Style>
+
+    <!-- Pill chips -->
+    <Style Selector="Border.chip">
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Padding" Value="10,4"/>
+      <Setter Property="Margin" Value="0,0,6,0"/>
+    </Style>
+    <Style Selector="Border.chip-ok">
+      <Setter Property="Background" Value="#0F3A1E"/>
+    </Style>
+    <Style Selector="Border.chip-warn">
+      <Setter Property="Background" Value="#3A2A07"/>
+    </Style>
+    <Style Selector="Border.chip-err">
+      <Setter Property="Background" Value="#3A0F0F"/>
+    </Style>
+    <Style Selector="Border.chip-info">
+      <Setter Property="Background" Value="#0A2A35"/>
+    </Style>
+    <Style Selector="Border.chip-neutral">
+      <Setter Property="Background" Value="#1E2A36"/>
+    </Style>
+    <Style Selector="Border.chip-muted">
+      <Setter Property="Background" Value="#18222D"/>
+    </Style>
+
+    <Style Selector="TextBlock.chip-ok">
+      <Setter Property="Foreground" Value="#5CE08C"/>
+    </Style>
+    <Style Selector="TextBlock.chip-warn">
+      <Setter Property="Foreground" Value="#E0C25C"/>
+    </Style>
+    <Style Selector="TextBlock.chip-err">
+      <Setter Property="Foreground" Value="#E0645C"/>
+    </Style>
+    <Style Selector="TextBlock.chip-info">
+      <Setter Property="Foreground" Value="#5CBEE0"/>
+    </Style>
+    <Style Selector="TextBlock.chip-neutral">
+      <Setter Property="Foreground" Value="#B8C5D5"/>
+    </Style>
+    <Style Selector="TextBlock.chip-muted">
+      <Setter Property="Foreground" Value="#8090A0"/>
+    </Style>
+
+    <!-- Card -->
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="#172230"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Padding" Value="14"/>
+      <Setter Property="BorderBrush" Value="#1F2C3A"/>
+      <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+
+    <!-- Status pill -->
+    <Style Selector="Border.status-pill">
+      <Setter Property="CornerRadius" Value="11"/>
+      <Setter Property="Padding" Value="10,2"/>
+    </Style>
+
+    <!-- ListItem con hover -->
+    <Style Selector="ListBoxItem">
+      <Setter Property="Padding" Value="0"/>
+    </Style>
+
+    <!-- Botones primarios con acento -->
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="#1F8AC0"/>
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Padding" Value="14,8"/>
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ContentPresenter">
+      <Setter Property="Background" Value="#2BA0D8"/>
+    </Style>
+
+    <Style Selector="Button.ghost">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="#9CB0C5"/>
+    </Style>
   </Application.Styles>
+
+  <Application.Resources>
+    <SolidColorBrush x:Key="AccentBrush" Color="#1F8AC0"/>
+  </Application.Resources>
+
 </Application>

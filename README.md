@@ -2,7 +2,9 @@
 
 Sincronizador **P2P** de mods para *American Truck Simulator* (ATS). Permite a grupos de amigos compartir y mantener **perfiles idénticos de mods** sin servidor central.
 
-> Estado: v0.1.0 — funcional, probado end-to-end en local.
+> Estado: v0.1.0 — UI + CLI funcional, probado end-to-end en local.
+
+La UI Avalonia 11 tiene 6 pestañas (Detección / Mods / Perfiles / Importar / Escuchar / Ajustes) con tema oscuro, accent turquesa, validación inline por mod y status bar dinámica. Captura pendiente de generar — ver `scripts/capture_screenshot.ps1` para reproducirla.
 
 ## Características
 
@@ -87,27 +89,61 @@ Dependencias (todas compatibles GPL-3.0):
 
 La capa `Nethermind.Libp2p 1.0.1` requiere .NET 10 (ya disponible en este repo). Sin embargo, su API `ILibp2pPeerFactoryBuilder` no expone los símbolos que asumimos (`AddAppLayerProtocol`, `IHost`, `OnDisconnected`). Para v0.1 usamos un transporte TCP propio (`ProfileTransfer`) que cumple el mismo objetivo en LAN. La capa de adaptación para libp2p está documentada para v0.3 — `ATSync.P2P/ProfileTransfer` será reemplazado por un `Libp2pHost` con Circuit Relay v2 + DCUtR.
 
-## UI (v0.1.1)
+## UI (v0.1.0)
 
 `ATSync.App` añade una GUI Avalonia 11 sobre `ATSync.Core`. 6 pestañas:
 
-1. **Detección** — Steam, ATS install, versión detectada, DLCs poseídos (X / 45) y tu PeerID (copiable).
-2. **Mods** — lista de `.scs` de la carpeta `mod` de ATS, con selección múltiple y botón "Publicar perfil".
-3. **Perfiles** — perfiles ATSync guardados localmente.
-4. **Importar** — pega un URI `atsync://profile/…` + la dirección `tcp://…` de tu amigo y descarga. Opt-in para activar en perfil ATS con backup.
-5. **Escuchar** — botón "Iniciar" para dejar tu peer a la escucha y mostrar `tcp://IP:puerto/` que compartes con amigos.
-6. **Ajustes** — activación automática opt-in, puerto preferido, perfiles privados (v0.4).
+1. **Detección** — Steam, ATS install, versión detectada, DLCs poseídos (X / 45) agrupados por categoría (Mapas / Carga / Tuning / Camiones / Pintura / Road Trip) y tu PeerID (copiable al portapapeles).
+2. **Mods** — lista de `.scs` de la carpeta `mod` de ATS, con filtro de búsqueda, badges de validación por mod (🟢 compatible / 🟡 falta DLC / 🔴 versión incompatible), contador de seleccionados y botón "Publish profile".
+4. **Perfiles** — perfiles ATSync guardados localmente en cards (autor, mod count, tamaño total, versión de juego).
+5. **Importar** — pega un URI `atsync://profile/…` + la dirección `tcp://…` de tu amigo. Validación inline del URI, descarga, opt-in para activar en perfil ATS con backup.
+6. **Escuchar** — botón "Iniciar" para dejar tu peer a la escucha y mostrar `tcp://IP:puerto/` que compartes con amigos. Contador de peers conectados en tiempo real.
+7. **Ajustes** — activación automática opt-in, puerto preferido, perfiles privados (v0.4).
 
-Ejecutable: `dist/ATSync.App.exe` (95 MB, self-contained single-file, .NET 10 embebido).
+Status bar dinámica refleja eventos P2P en tiempo real (peer conectado, mod recibido, error). Tema oscuro con accent turquesa ATS.
+
+Ejecutable: `dist/ATSync.App.exe` (~80 MB, self-contained single-file, .NET 10 embebido).
 
 ```bash
 dotnet run --project src/ATSync.App
 # o:
-dist/ATSync.App.exe
+dist\ATSync.App.exe
 ```
 
 Build:
 
 ```bash
 dotnet publish src/ATSync.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true
+```
+
+Captura:
+
+```
++--------------------------------------------------------------+
+| ATSync v0.1.0 BETA    Sincronizador P2P de mods para ATS  [Copy]|
++--------------------------------------------------------------+
+| [1. Detección] [2. Mods] [3. Perfiles] [4. Importar] ...        |
+| ...                                                            |
+| ATSync v0.1.0 · GPL-3.0                                      |
++--------------------------------------------------------------+
+```
+
+## Quickstart
+
+```bash
+# Compilar todo
+dotnet build
+
+# Lanzar la UI
+dist\ATSync.App.exe
+# o desde código:
+dotnet run --project src\ATSync.App
+
+# CLI (mismos flujos desde terminal):
+dotnet run --project src\ATSync.Cli -- detect
+dotnet run --project src\ATSync.Cli -- scan
+dotnet run --project src\ATSync.Cli -- publish
+dotnet run --project src\ATSync.Cli -- listen
+dotnet run --project src\ATSync.Cli -- import <atsync-uri> <peer-addr>
+dotnet run --project src\ATSync.Cli -- smoke
 ```
