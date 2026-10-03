@@ -144,6 +144,59 @@ public sealed class Libp2pHost : IAsyncDisposable
         return _peer.DialAsync(Multiaddress.Decode(multiaddr), ct);
     }
 
+    /// <summary>
+    /// Dial al peer, abre el stream <see cref="AtsyncProtocol"/> con la operación
+    /// <see cref="AtsyncProtocol.DialOperation.DownloadProfile"/> y devuelve los bytes del perfil.
+    /// </summary>
+    public async Task<AtsyncProtocol.DownloadResult> DownloadProfileAsync(
+        string multiaddr, string profileName, CancellationToken ct = default)
+    {
+        if (_peer is null) throw new InvalidOperationException("Libp2pHost no arrancado");
+        var session = await _peer.DialAsync(Multiaddress.Decode(multiaddr), ct).ConfigureAwait(false);
+        try
+        {
+            AppProtocol.PendingOp = AtsyncProtocol.DialOperation.DownloadProfile;
+            AppProtocol.PendingArg = profileName;
+            await session.DialAsync<AtsyncProtocol>(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            AppProtocol.PendingOp = AtsyncProtocol.DialOperation.SmokePing;
+            AppProtocol.PendingArg = "";
+            try { await session.DisconnectAsync().ConfigureAwait(false); } catch { }
+        }
+        return AppProtocol.LastDownload ?? new AtsyncProtocol.DownloadResult
+        {
+            Success = false,
+            Error = "Protocolo no produjo respuesta"
+        };
+    }
+
+    /// <summary>Dial al peer, abre el stream con operación DownloadMod y devuelve los bytes del mod.</summary>
+    public async Task<AtsyncProtocol.DownloadResult> DownloadModAsync(
+        string multiaddr, string modHash, CancellationToken ct = default)
+    {
+        if (_peer is null) throw new InvalidOperationException("Libp2pHost no arrancado");
+        var session = await _peer.DialAsync(Multiaddress.Decode(multiaddr), ct).ConfigureAwait(false);
+        try
+        {
+            AppProtocol.PendingOp = AtsyncProtocol.DialOperation.DownloadMod;
+            AppProtocol.PendingArg = modHash;
+            await session.DialAsync<AtsyncProtocol>(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            AppProtocol.PendingOp = AtsyncProtocol.DialOperation.SmokePing;
+            AppProtocol.PendingArg = "";
+            try { await session.DisconnectAsync().ConfigureAwait(false); } catch { }
+        }
+        return AppProtocol.LastDownload ?? new AtsyncProtocol.DownloadResult
+        {
+            Success = false,
+            Error = "Protocolo no produjo respuesta"
+        };
+    }
+
     /// <summary>Dial a un peer conocido por PeerId usando las direcciones cacheadas en el PeerStore.</summary>
     public Task<ISession> DialAsync(PeerId peerId, CancellationToken ct = default)
     {

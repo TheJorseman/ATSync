@@ -4,6 +4,7 @@ using ATSync.Core.Mods;
 using ATSync.Core.Models;
 using ATSync.Core.P2P;
 using ATSync.Core.Profiles;
+using Microsoft.Extensions.Logging;
 
 namespace ATSync.App.ViewModels;
 
@@ -384,20 +385,34 @@ public sealed class ImportViewModel : ObservableObject
     {
         try
         {
-            if (!_s.Transfer.IsRunning) Start();
-            var importer = new ProfileImporter(_s.Identity, _s.Transfer, _s.Profiles, _s.GameVer, _s.DlcDet, _s.Paths)
-            {
-                ValidateAgainstLocal = true
-            };
-            Status = "⏳ Conectando y descargando perfil…";
+            var isLibp2p = LooksLikeLibp2pMultiaddr(PeerAddress);
+            Status = isLibp2p ? "⏳ Dialing libp2p…" : "⏳ Conectando TCP…";
             StatusColor = "info";
             ProgressLabel = "Conectando…";
             OnPropertyChanged(nameof(Status));
             OnPropertyChanged(nameof(StatusColor));
             OnPropertyChanged(nameof(ProgressLabel));
 
-            var result = await importer.ImportAsync(Uri, PeerAddress);
-            if (result.Success)
+            ATSync.Core.P2P.ProfileImporter.ImportResult? result;
+            if (isLibp2p)
+            {
+                result = await ImportViaLibp2pAsync(Uri, PeerAddress);
+            }
+            else
+            {
+                if (!_s.Transfer.IsRunning) Start();
+                var importer = new ProfileImporter(_s.Identity, _s.Transfer, _s.Profiles, _s.GameVer, _s.DlcDet, _s.Paths)
+                {
+                    ValidateAgainstLocal = true
+                };
+                result = await importer.ImportAsync(Uri, PeerAddress);
+            }
+
+            if (result is null)
+            {
+                Status = "✗ Fallo sin respuesta"; StatusColor = "err"; ProgressLabel = "Error";
+            }
+            else if (result.Success)
             {
                 Status = $"✓ Importado: {result.Profile?.Name} ({result.Mods.Count(m => m.Ok)}/{result.Mods.Count} mods OK)";
                 StatusColor = "ok";
@@ -436,6 +451,96 @@ public sealed class ImportViewModel : ObservableObject
         OnPropertyChanged(nameof(Status));
         OnPropertyChanged(nameof(StatusColor));
         OnPropertyChanged(nameof(ProgressLabel));
+    }
+
+    private static bool LooksLikeLibp2pMultiaddr(string addr) =>
+        !string.IsNullOrWhiteSpace(addr) && addr.TrimStart().StartsWith("/ip", StringComparison.Ordinal);
+
+    private async Task<ATSync.Core.P2P.ProfileImporter.ImportResult?> ImportViaLibp2pAsync(string uri, string multiaddr)
+    {
+        try
+        {
+            var host = _s.GetOrCreateLibp2pHost();
+            if (!host.IsRunning)
+                await host.StartAsync(
+                    new[] { $"/ip4/0.0.0.0/tcp/{_s.Settings.Data.Libp2pPort}" },
+                    enableRelay: _s.Settings.Data.Libp2pEnableRelay);
+
+            var cid = ExtractCidFromUri(uri);
+            if (string.IsNullOrEmpty(cid))
+                return new ATSync.Core.P2P.ProfileImporter.ImportResult { Error = "URI sin CID válido" };
+
+            Status = "⏳ Descargando perfil vía libp2p…";
+            OnPropertyChanged(nameof(Status));
+
+            var dl = await host.DownloadProfileAsync(multiaddr, cid);
+            if (!dl.Success || dl.Payload is null)
+                return new ATSync.Core.P2P.ProfileImporter.ImportResult { Error = dl.Error ?? "sin payload" };
+
+            var profile = System.Text.Json.JsonSerializer.Deserialize<ATSync.Core.Models.AtsyncProfile>(
+                dl.Payload,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (profile is null)
+                return new ATSync.Core.P2P.ProfileImporter.ImportResult { Error = "JSON inválido" };
+
+            var ver = _s.GameVer.DetectFromGameLog();
+            var dlcs = _s.DlcDet.Detect();
+            var owned = dlcs.Where(d => d.Owned).Select(d => d.Id).ToHashSet();
+            var modResults = new List<ATSync.Core.P2P.ProfileImporter.ModImportResult>();
+            Directory.CreateDirectory(_s.Paths.StagingDir);
+
+            foreach (var m in profile.Mods)
+            {
+                try
+                {
+                    var modDl = await host.DownloadModAsync(multiaddr, m.Cid);
+                    if (!modDl.Success || modDl.Payload is null)
+                    {
+                        modResults.Add(new ATSync.Core.P2P.ProfileImporter.ModImportResult
+                            { Filename = m.Filename, Ok = false, LocalPath = "", Error = modDl.Error ?? "mod no encontrado" });
+                        continue;
+                    }
+                    var tmp = System.IO.Path.Combine(_s.Paths.StagingDir, m.Cid + ".scs");
+                    await System.IO.File.WriteAllBytesAsync(tmp, modDl.Payload);
+                    var actual = Core.Util.Hashing.Sha256HexOfFile(tmp);
+                    if (!string.IsNullOrEmpty(m.Sha256) && !m.Sha256.Equals(actual, StringComparison.OrdinalIgnoreCase))
+                    {
+                        modResults.Add(new ATSync.Core.P2P.ProfileImporter.ModImportResult
+                            { Filename = m.Filename, Ok = false, LocalPath = tmp, Error = "sha256 mismatch" });
+                        continue;
+                    }
+                    var dest = System.IO.Path.Combine(Core.Util.AppPaths.DefaultAtsModsDir(), System.IO.Path.GetFileName(tmp));
+                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(dest)!);
+                    if (System.IO.File.Exists(dest)) System.IO.File.Delete(dest);
+                    System.IO.File.Move(tmp, dest);
+                    modResults.Add(new ATSync.Core.P2P.ProfileImporter.ModImportResult
+                        { Filename = m.Filename, Ok = true, LocalPath = dest });
+                }
+                catch (Exception ex)
+                {
+                    modResults.Add(new ATSync.Core.P2P.ProfileImporter.ModImportResult
+                        { Filename = m.Filename, Ok = false, LocalPath = "", Error = ex.Message });
+                }
+            }
+            _s.Profiles.Save(profile);
+            return new ATSync.Core.P2P.ProfileImporter.ImportResult
+            {
+                Success = modResults.All(r => r.Ok),
+                Profile = profile,
+                Mods = modResults
+            };
+        }
+        catch (Exception ex)
+        {
+            _s.Log.LogError(ex, "ImportViaLibp2pAsync falló");
+            return new ATSync.Core.P2P.ProfileImporter.ImportResult { Error = ex.Message };
+        }
+    }
+
+    private static string? ExtractCidFromUri(string uri)
+    {
+        if (!ATSync.Core.P2P.ProfileUri.TryParse(uri, out var p) || p is null) return null;
+        return p.Cid;
     }
 
     private void Start()

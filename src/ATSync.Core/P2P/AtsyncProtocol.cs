@@ -22,6 +22,11 @@ namespace ATSync.Core.P2P;
 /// Implementa <see cref="ISessionProtocol"/> directamente para tener control total
 /// sobre el flujo dialer/listener; heredar de SymmetricSessionProtocol hace que
 /// `DialAsync(IChannel, ISessionContext)`/`ListenAsync(...)` no sean virtuales.
+///
+/// Operación del dialer (lado cliente): se configura ANTES de
+/// <c>await session.DialAsync&lt;AtsyncProtocol&gt;(ct)</c> con <see cref="PendingOp"/>
+/// + <see cref="PendingArg"/>. Una vez finalizada la llamada, los bytes recibidos
+/// quedan en <see cref="LastDownload"/>.
 /// </summary>
 public sealed class AtsyncProtocol : ISessionProtocol, ISessionListenerProtocol, IProtocol
 {
@@ -41,6 +46,15 @@ public sealed class AtsyncProtocol : ISessionProtocol, ISessionListenerProtocol,
     /// <summary>Logging opcional.</summary>
     public ILogger Log { get; set; } = NullLogger.Instance;
 
+    /// <summary>Operación a ejecutar cuando se abra un stream saliente con este protocolo.</summary>
+    public DialOperation PendingOp { get; set; } = DialOperation.SmokePing;
+
+    /// <summary>Argumento de la operación (profile CID o mod hash).</summary>
+    public string PendingArg { get; set; } = "";
+
+    /// <summary>Resultado del último download completado por el lado dialer.</summary>
+    public DownloadResult? LastDownload { get; private set; }
+
     // Sesiones activas (entrantes) para que el host pueda enumerarlas si lo necesita.
     private static readonly ConcurrentBag<AtsyncProtocol> _instances = new();
     public static IReadOnlyCollection<AtsyncProtocol> ActiveInstances => _instances;
@@ -50,10 +64,31 @@ public sealed class AtsyncProtocol : ISessionProtocol, ISessionListenerProtocol,
         _instances.Add(this);
     }
 
-    /// <summary>Lado dialer (cliente): HELLO + LIST + BYE.</summary>
+    public enum DialOperation
+    {
+        /// <summary>HELLO + LIST + BYE (smoke test; no payload).</summary>
+        SmokePing,
+        /// <summary>HELLO + GETPROFILE &lt;PendingArg&gt; + read + BYE.</summary>
+        DownloadProfile,
+        /// <summary>HELLO + GETMOD &lt;PendingArg&gt; + read + BYE.</summary>
+        DownloadMod,
+    }
+
+    public sealed class DownloadResult
+    {
+        public bool Success { get; init; }
+        public byte[]? Payload { get; init; }
+        public string? ContentName { get; init; }
+        public string? Error { get; init; }
+    }
+
+    /// <summary>Lado dialer (cliente): HELLO + [op] + BYE según <see cref="PendingOp"/>.</summary>
     public async Task DialAsync(IChannel channel, ISessionContext context)
     {
-        Log.LogInformation("AtsyncProtocol: DialAsync (caller) en canal {Channel}", channel.GetHashCode());
+        Log.LogInformation("AtsyncProtocol: DialAsync op={Op} canal={Channel}",
+            PendingOp, channel.GetHashCode());
+
+        LastDownload = null;
         try
         {
             // HELLO bidireccional.
@@ -61,20 +96,17 @@ public sealed class AtsyncProtocol : ISessionProtocol, ISessionListenerProtocol,
             var helloLine = await channel.ReadLineAsync().ConfigureAwait(false);
             Log.LogDebug("AtsyncProtocol dialer HELLO rx: {Line}", helloLine);
 
-            // LIST.
-            await channel.WriteLineAsync("LIST", prependedWithSize: false).ConfigureAwait(false);
-            var namesHeader = await channel.ReadLineAsync().ConfigureAwait(false);
-            Log.LogInformation("AtsyncProtocol dialer LIST rx: {Line}", namesHeader);
-            if (namesHeader != null && namesHeader.StartsWith("NAMES ", StringComparison.Ordinal))
+            switch (PendingOp)
             {
-                if (int.TryParse(namesHeader.Substring(6).Trim(), out var count))
-                {
-                    for (int i = 0; i < count; i++)
-                    {
-                        var n = await channel.ReadLineAsync().ConfigureAwait(false);
-                        Log.LogDebug("AtsyncProtocol dialer NAME rx: {Line}", n);
-                    }
-                }
+                case DialOperation.SmokePing:
+                    await RunSmokeAsync(channel).ConfigureAwait(false);
+                    break;
+                case DialOperation.DownloadProfile:
+                    LastDownload = await RunDownloadAsync(channel, "GETPROFILE", PendingArg).ConfigureAwait(false);
+                    break;
+                case DialOperation.DownloadMod:
+                    LastDownload = await RunDownloadAsync(channel, "GETMOD", PendingArg).ConfigureAwait(false);
+                    break;
             }
 
             // BYE.
@@ -83,12 +115,87 @@ public sealed class AtsyncProtocol : ISessionProtocol, ISessionListenerProtocol,
         catch (Exception ex)
         {
             Log.LogWarning(ex, "AtsyncProtocol.DialAsync falló");
+            LastDownload = new DownloadResult { Success = false, Error = ex.Message };
         }
         finally
         {
             try { await channel.WriteEofAsync(CancellationToken.None).ConfigureAwait(false); } catch { }
             try { await channel.CloseAsync().ConfigureAwait(false); } catch { }
         }
+    }
+
+    private async Task RunSmokeAsync(IChannel channel)
+    {
+        await channel.WriteLineAsync("LIST", prependedWithSize: false).ConfigureAwait(false);
+        var namesHeader = await channel.ReadLineAsync().ConfigureAwait(false);
+        Log.LogInformation("AtsyncProtocol dialer LIST rx: {Line}", namesHeader);
+        if (namesHeader != null && namesHeader.StartsWith("NAMES ", StringComparison.Ordinal))
+        {
+            if (int.TryParse(namesHeader.Substring(6).Trim(), out var count))
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    var n = await channel.ReadLineAsync().ConfigureAwait(false);
+                    Log.LogDebug("AtsyncProtocol dialer NAME rx: {Line}", n);
+                }
+            }
+        }
+    }
+
+    private async Task<DownloadResult> RunDownloadAsync(IChannel channel, string verb, string arg)
+    {
+        if (string.IsNullOrEmpty(arg))
+            return new DownloadResult { Success = false, Error = $"Falta argumento para {verb}" };
+
+        await channel.WriteLineAsync($"{verb} {arg}", prependedWithSize: false).ConfigureAwait(false);
+        var header = await channel.ReadLineAsync().ConfigureAwait(false);
+        if (header is null)
+            return new DownloadResult { Success = false, Error = "Sin respuesta del peer" };
+
+        if (header.StartsWith("ERR ", StringComparison.Ordinal))
+            return new DownloadResult { Success = false, Error = header.Substring(4) };
+
+        // Para GETPROFILE: header = "SIZE <bytes>"
+        // Para GETMOD:     header = "MOD <hash> SIZE <bytes>"
+        int size;
+        string contentName = arg;
+        if (verb == "GETMOD" && header.StartsWith("MOD ", StringComparison.Ordinal))
+        {
+            var parts = header.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 4 || parts[2] != "SIZE") return new DownloadResult { Success = false, Error = $"Header GETMOD malformado: {header}" };
+            contentName = parts[1];
+            size = int.Parse(parts[3]);
+        }
+        else if (header.StartsWith("SIZE ", StringComparison.Ordinal))
+        {
+            size = int.Parse(header.Substring(5));
+        }
+        else
+        {
+            return new DownloadResult { Success = false, Error = $"Header inesperado: {header}" };
+        }
+
+        // Lee <size> bytes exactos del canal.
+        var buf = new byte[size];
+        var read = await ReadExactAsync(channel, buf, 0, size).ConfigureAwait(false);
+        if (read != size)
+            return new DownloadResult { Success = false, Error = $"Read corto: {read}/{size}" };
+
+        return new DownloadResult { Success = true, Payload = buf, ContentName = contentName };
+    }
+
+    /// <summary>Lee exactamente <paramref name="count"/> bytes del canal usando ReadAsync.</summary>
+    private static async Task<int> ReadExactAsync(IChannel channel, byte[] buffer, int offset, int count)
+    {
+        int total = 0;
+        while (total < count)
+        {
+            var rr = await channel.ReadAsync(count - total, ReadBlockingMode.WaitAll, CancellationToken.None).ConfigureAwait(false);
+            if (rr.Result != IOResult.Ok || rr.Data.Length == 0) break;
+            rr.Data.CopyTo(new Span<byte>(buffer, offset + total, (int)Math.Min(rr.Data.Length, count - total)));
+            total += (int)rr.Data.Length;
+        }
+        return total;
     }
 
     /// <summary>Lado listener (servidor): sirve HELLO y comandos hasta BYE.</summary>
