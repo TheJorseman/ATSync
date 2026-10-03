@@ -2,7 +2,7 @@
 
 Sincronizador **P2P** de mods para *American Truck Simulator* (ATS). Permite a grupos de amigos compartir y mantener **perfiles idénticos de mods** sin servidor central.
 
-> Estado: v0.1.0 — UI + CLI funcional, probado end-to-end en local.
+> Estado: v0.2.0 — UI + CLI + libp2p integrado (Relay v2 + DCUtR ready).
 
 La UI Avalonia 11 tiene 6 pestañas (Detección / Mods / Perfiles / Importar / Escuchar / Ajustes) con tema oscuro, accent turquesa, validación inline por mod y status bar dinámica. Captura pendiente de generar — ver `scripts/capture_screenshot.ps1` para reproducirla.
 
@@ -23,9 +23,10 @@ La UI Avalonia 11 tiene 6 pestañas (Detección / Mods / Perfiles / Importar / E
 | Estado | Componente |
 |---|---|
 | ✅ v0.1 | Detección ATS, parser SiiNunit, perfil ATSync, CID, PeerIdentity, transfer TCP |
-| ⏳ v0.2 | Interfaz gráfica (Avalonia 11) |
-| ⏳ v0.3 | Integración con `Nethermind.Libp2p` (Circuit Relay v2 + DCUtR para NAT traversal real sin relay manual) |
-| ⏳ v0.4 | Perfiles privados (PSK Noise) |
+| ✅ v0.1.x | Interfaz gráfica (Avalonia 11, 6 pestañas, tema oscuro, validación inline) |
+| ✅ v0.2 | Integración con `Nethermind.Libp2p 1.0.1` (Relay v2 + DCUtR ready, E2E smoke OK) |
+| ⏳ v0.3 | UI: arrancar Libp2pHost en background, importar via multiaddr libp2p, peer discovery via Kad-DHT |
+| ⏳ v0.4 | Perfiles privados (PSK Noise + Ed25519 real) |
 | ⏳ v0.5 | System tray + auto-update + instalador NSIS |
 
 ## Quickstart
@@ -83,11 +84,40 @@ Dependencias (todas compatibles GPL-3.0):
 | Microsoft.Extensions.Logging | 10.0.x | MIT |
 | System.Security.Cryptography.ProtectedData | 9.0.0 | MIT |
 
-`Nethermind.Libp2p` (MIT) se integrará en v0.3 para NAT traversal sin abrir puertos.
+`Nethermind.Libp2p` 1.0.1 (MIT) integrado en v0.2 — ver sección siguiente.
 
-## Estado de la integración libp2p
+## Integración libp2p (v0.2)
 
-La capa `Nethermind.Libp2p 1.0.1` requiere .NET 10 (ya disponible en este repo). Sin embargo, su API `ILibp2pPeerFactoryBuilder` no expone los símbolos que asumimos (`AddAppLayerProtocol`, `IHost`, `OnDisconnected`). Para v0.1 usamos un transporte TCP propio (`ProfileTransfer`) que cumple el mismo objetivo en LAN. La capa de adaptación para libp2p está documentada para v0.3 — `ATSync.P2P/ProfileTransfer` será reemplazado por un `Libp2pHost` con Circuit Relay v2 + DCUtR.
+ATSync v0.2 integra `Nethermind.Libp2p 1.0.1` como segundo transporte P2P junto al `ProfileTransfer` TCP. La capa libp2p se compone con `WithRelay()` (Circuit Relay v2 + DCUtR hole-punching) sobre un stack TCP + Noise + Yamux + Multistream-Select.
+
+Componentes nuevos en `ATSync.Core.P2P`:
+
+- **`Libp2pHost`** — genera identidad Ed25519 (`Identity()`), abre el listener TCP, registra el protocolo app-layer y expone `Libp2pPeerId` (`12D3KooW…`) y `ListenMultiaddrs` (`/ip4/.../tcp/.../p2p/12D3KooW…`).
+- **`AtsyncProtocol`** (`ISessionProtocol`) — protocolo app-layer `/atsync/profile/1.0.0` que corre dentro de la sesión multiplexada. Implementa HELLO/LIST/GETPROFILE/GETMOD/BYE sobre `IChannel.WriteLineAsync`/`ReadLineAsync`. Se registra vía `IPeerFactoryBuilder.AddProtocol(AppProtocol, isExposed: true)`.
+
+E2E smoke test verificado (`C:\Users\migue\AppData\Local\Temp\libp2p-smoke`):
+
+- Host A y Host B arrancan con Ed25519 + Relay on.
+- Negociación TCP + Noise + Yamux + Multistream + Identify OK.
+- `/atsync/profile/1.0.0` aparece en el `signedPeerRecord` de Identify (`"protocols": ["/ipfs/id/1.0.0", "/ipfs/id/push/1.0.0", "/ipfs/ping/1.0.0", "/atsync/profile/1.0.0"]`).
+- `session.DialAsync<AtsyncProtocol>(ct)` completa con `RanToCompletion` tras HELLO + LIST + BYE.
+
+Wire format del protocolo (UTF-8, line-based sobre `IChannel`):
+
+```
+HELLO <appPeerId>
+LIST                    -> NAMES <count>\n<name1>\n<name2>\n...
+GETPROFILE <name>       -> SIZE <bytes>\n<json body>
+GETMOD <hash>           -> MOD <hash> SIZE <bytes>\n<raw bytes>
+BYE                     -> BYE
+```
+
+NAT traversal: dos pares detrás de NAT pueden negociar canales directos vía Relay v2 (HOP) y luego DCUtR perfora el NAT. Configurable en `Ajustes > Transporte P2P > Habilitar Circuit Relay v2`.
+
+Limitaciones conocidas de v0.2:
+
+- Relay client está habilitado pero no hay un servidor de relay público configurado por defecto. Los usuarios pueden apuntar a uno público (e.g. `auto-relay.libp2p.io`) o auto-hospedarlo con `WithRelay()` y `AutoRelayMode.Server` (v0.3).
+- El protocolo actual es simétrico y stateful; todavía no hay PSK ni autenticación mutua fuerte. La verificación Ed25519 se hace en libp2p a nivel de transporte (Noise), no a nivel aplicación.
 
 ## UI (v0.1.0)
 
@@ -98,11 +128,11 @@ La capa `Nethermind.Libp2p 1.0.1` requiere .NET 10 (ya disponible en este repo).
 4. **Perfiles** — perfiles ATSync guardados localmente en cards (autor, mod count, tamaño total, versión de juego).
 5. **Importar** — pega un URI `atsync://profile/…` + la dirección `tcp://…` de tu amigo. Validación inline del URI, descarga, opt-in para activar en perfil ATS con backup.
 6. **Escuchar** — botón "Iniciar" para dejar tu peer a la escucha y mostrar `tcp://IP:puerto/` que compartes con amigos. Contador de peers conectados en tiempo real.
-7. **Ajustes** — activación automática opt-in, puerto preferido, perfiles privados (v0.4).
+7. **Ajustes** — activación automática opt-in, puerto preferido, transporte P2P (`TCP` o `libp2p`), puerto libp2p (default 4001), relay habilitado, perfiles privados (v0.4).
 
 Status bar dinámica refleja eventos P2P en tiempo real (peer conectado, mod recibido, error). Tema oscuro con accent turquesa ATS.
 
-Ejecutable: `dist/ATSync.App.exe` (~80 MB, self-contained single-file, .NET 10 embebido).
+Ejecutable: `dist/app/ATSync.App.exe` (~140 MB self-contained single-file, .NET 10 + libp2p nativo embebido) y `dist/cli/ATSync.Cli.exe` (~116 MB).
 
 ```bash
 dotnet run --project src/ATSync.App

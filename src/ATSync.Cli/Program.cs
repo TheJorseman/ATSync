@@ -49,9 +49,10 @@ public static class Program
 
     private static int CmdVersion()
     {
-        Console.WriteLine("ATSync 0.1.0");
+        Console.WriteLine("ATSync 0.2.0");
         Console.WriteLine($"  .NET: {Environment.Version}");
         Console.WriteLine($"  OS: {Environment.OSVersion}");
+        Console.WriteLine("  Transport: ProfileTransfer (TCP) + Nethermind.Libp2p 1.0.1 (libp2p)");
         return 0;
     }
 

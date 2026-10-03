@@ -1,5 +1,6 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:ATSync.App.Converters"
              x:Class="ATSync.App.App"
              RequestedThemeVariant="Dark">
 
@@ -107,6 +108,7 @@
 
   <Application.Resources>
     <SolidColorBrush x:Key="AccentBrush" Color="#1F8AC0"/>
+    <conv:StringEqualsConverter x:Key="StringEqualsConverter"/>
   </Application.Resources>
 
 </Application>

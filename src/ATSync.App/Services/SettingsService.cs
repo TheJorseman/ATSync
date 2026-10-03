@@ -43,4 +43,13 @@ public sealed class Settings
 
     /// <summary>Si true, sólo acepta perfiles firmados con clave conocida (v0.4).</summary>
     public bool PrivateProfilesOnly { get; set; }
+
+    /// <summary>Transporte preferido: "tcp" (default) o "libp2p" (v0.2+).</summary>
+    public string Transport { get; set; } = "tcp";
+
+    /// <summary>Puerto libp2p preferido (0 = aleatorio, default 4001).</summary>
+    public int Libp2pPort { get; set; } = 4001;
+
+    /// <summary>Si true, habilita Circuit Relay v2 en libp2p (necesario para NAT traversal).</summary>
+    public bool Libp2pEnableRelay { get; set; } = true;
 }

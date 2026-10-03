@@ -337,9 +337,29 @@
               <CheckBox Content="Solo perfiles privados firmados (v0.4 - placeholder)"
                         IsChecked="{Binding Settings.PrivateProfilesOnly, Mode=TwoWay}"/>
               <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,4,0,0">
-                <TextBlock Text="Puerto de escucha preferido (0 = aleatorio):" VerticalAlignment="Center"/>
+                <TextBlock Text="Puerto TCP de escucha (0 = aleatorio):" VerticalAlignment="Center"/>
                 <NumericUpDown Value="{Binding Settings.ListenPort, Mode=TwoWay}" Minimum="0" Maximum="65535" Increment="1"/>
               </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card" Padding="16">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Transporte P2P" FontWeight="SemiBold" Foreground="#5CBEE0"/>
+              <StackPanel Orientation="Horizontal" Spacing="14">
+                <RadioButton Content="TCP (ProfileTransfer, v0.1)" GroupName="transport"
+                            IsChecked="{Binding Settings.Transport, Converter={StaticResource StringEqualsConverter}, ConverterParameter=tcp, Mode=TwoWay}"/>
+                <RadioButton Content="libp2p (Circuit Relay v2 + DCUtR, v0.2+)" GroupName="transport"
+                            IsChecked="{Binding Settings.Transport, Converter={StaticResource StringEqualsConverter}, ConverterParameter=libp2p, Mode=TwoWay}"/>
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,4,0,0">
+                <TextBlock Text="Puerto libp2p (0 = aleatorio, default 4001):" VerticalAlignment="Center"/>
+                <NumericUpDown Value="{Binding Settings.Libp2pPort, Mode=TwoWay}" Minimum="0" Maximum="65535" Increment="1"/>
+              </StackPanel>
+              <CheckBox Content="Habilitar Circuit Relay v2 (recomendado para NAT traversal)"
+                        IsChecked="{Binding Settings.Libp2pEnableRelay, Mode=TwoWay}"/>
+              <TextBlock TextWrapping="Wrap" Opacity="0.75" FontSize="11"
+                         Text="libp2p permite NAT traversal automático (Relay v2 + DCUtR). Aún requiere que al menos un par sea accesible o use un relay público."/>
             </StackPanel>
           </Border>
 
